@@ -1,22 +1,35 @@
-from typing import Generic, SupportsIndex, TypeVar, overload, override
+import typing
+from typing import (
+    Generic,
+    NotRequired,
+    SupportsIndex,
+    TypedDict,
+    TypeVar,
+    Unpack,
+    overload,
+    override,
+)
 
 T = TypeVar("T")
 S = TypeVar("S")
+
+
+class InfiniteListKwargs(TypedDict):
+    max_chunk_size: NotRequired[int]
 
 
 class InfiniteList(list[T]):
     """Implementation of 'list' which can offload data to the hard drive in case of excessive memory usage."""
 
     class __Chunk(Generic[S]):
-        MAX_CHUNK_SIZE: int = 10
-
-        def __init__(self, start_index: int) -> None:
+        def __init__(self, start_index: int, max_chunk_size: int) -> None:
             # TODO: change to tree for faster searching
             self.data: list[S] = []
-            self.start_index: int = start_index
-            self.end_index: int = start_index
             #  TODO: try to make it based on memory space used
-            self.capacity: int = self.MAX_CHUNK_SIZE
+            self.capacity: int = max_chunk_size
+            self.end_index: int = start_index
+            self.max_chunk_size = max_chunk_size
+            self.start_index: int = start_index
 
         def append(self, value: S) -> None:
             assert not self.full()
@@ -24,26 +37,30 @@ class InfiniteList(list[T]):
             self.data.append(value)
 
         def full(self) -> bool:
-            return self.end_index == (self.start_index + self.MAX_CHUNK_SIZE)
+            return self.end_index == (self.start_index + self.max_chunk_size)
 
         def has_index(self, index: int) -> bool:
             return self.start_index <= index < self.end_index
 
         def should_have_index(self, index: int) -> bool:
-            return self.start_index <= index < (self.start_index + self.MAX_CHUNK_SIZE)
+            return self.start_index <= index < (self.start_index + self.max_chunk_size)
 
         def __getitem__(self, index: int) -> S:
             return self.data[index - self.start_index]
+
+        def __iter__(self) -> typing.Iterator[S]:
+            yield from self.data
 
         def __len__(self) -> int:
             return len(self.data)
 
         @override
         def __str__(self) -> str:
-            return f"List chunk, [{self.start_index}, {self.end_index}), capacity: {self.capacity}"
+            return ", ".join(d.__str__() for d in self.data)
 
-    def __init__(self) -> None:
+    def __init__(self, **kwargs: Unpack[InfiniteListKwargs]) -> None:
         super().__init__()
+        self.max_chunk_size: int = kwargs.get("max_chunk_size", 10)
         self.chunks: list[InfiniteList.__Chunk[T]] = []
 
     @override
@@ -70,21 +87,25 @@ class InfiniteList(list[T]):
     def __len__(self) -> int:
         return sum(len(c) for c in self.chunks)
 
+    @override
+    def __str__(self) -> str:
+        return "[" + ", ".join(c.__str__() for c in self.chunks) + "]"
+
     def __bounds_check(self, index: SupportsIndex) -> None:
         end_index: int = -1
         if len(self.chunks) > 0:
             end_index = self.chunks[-1].end_index
 
-        if (
-            index.__index__() >= 0
-            and index.__index__() >= end_index
-            or index.__index__() < 0
-            and index.__index__() < self.__positive_index(index).__index__()
+        index_int = index.__index__()
+        if (index_int >= 0 and index_int >= end_index) or (
+            index_int < 0 and index_int < self.__positive_index(index).__index__()
         ):
             raise IndexError("list index out of range")
 
     def __create_chunk(self, start_index: SupportsIndex) -> InfiniteList.__Chunk[T]:
-        self.chunks.append(InfiniteList.__Chunk[T](start_index.__index__()))
+        self.chunks.append(
+            InfiniteList.__Chunk[T](start_index.__index__(), self.max_chunk_size)
+        )
         return self.chunks[-1]
 
     def __get_chunk(self, index: SupportsIndex) -> InfiniteList.__Chunk[T]:
