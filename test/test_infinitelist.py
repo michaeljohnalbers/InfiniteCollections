@@ -58,6 +58,25 @@ class InfiniteListTest(unittest.TestCase):
         expected_number_str = expected_number_str[0:-2]
         self.assertEqual("[" + expected_number_str + "]", integer_list.__str__())
 
+    def test_heterogeneous_list(self) -> None:
+        """Basic test to ensure that the class can support holding mixed types."""
+        mixed_list: InfiniteList[Any] = InfiniteList()
+        mixed_list.append(1)
+        mixed_list.append(3.3)
+        mixed_list.append("Hi there")
+
+        class Dummy:
+            pass
+
+        mixed_list.append(Dummy())
+        mixed_list.append(None)
+
+        self.assertEqual(1, mixed_list[0])
+        self.assertEqual(3.3, mixed_list[1])
+        self.assertEqual("Hi there", mixed_list[2])
+        self.assertIsInstance(mixed_list[3], Dummy)
+        self.assertIsNone(mixed_list[4])
+
 
 if __name__ == "__main__":
     unittest.main()
